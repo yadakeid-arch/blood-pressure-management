@@ -1,0 +1,715 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>血圧ノート</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="血圧ノート">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Chivo+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one narrow column; the reading sits in an LCD-coloured panel, history below as a ledger */
+:root{
+  --bg:#eef0ee; --surface:#fbfcfb; --ink:#1d2321; --muted:#5f6b67; --line:#d3d9d6;
+  --lcd:#b9c2b6; --lcd-ink:#1f2620; --accent:#1c3f94; --accent-ink:#ffffff;
+  --sys:#1c3f94; --dia:#4f8a8b; --warn:#a4570c; --warn-bg:#fbe9d2; --danger:#a3242b;
+  --f-body:"Zen Kaku Gothic New","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;
+  --f-num:"Chivo Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#121614; --surface:#1a201d; --ink:#e4e9e6; --muted:#98a39f; --line:#2c3531;
+  --lcd:#5d6a5e; --lcd-ink:#0d120e; --accent:#7f9cf0; --accent-ink:#0d1430;
+  --sys:#8ea8f2; --dia:#7fbcbc; --warn:#f0b26a; --warn-bg:#3a2a16; --danger:#f08a8f; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121614; --surface:#1a201d; --ink:#e4e9e6; --muted:#98a39f; --line:#2c3531;
+  --lcd:#5d6a5e; --lcd-ink:#0d120e; --accent:#7f9cf0; --accent-ink:#0d1430;
+  --sys:#8ea8f2; --dia:#7fbcbc; --warn:#f0b26a; --warn-bg:#3a2a16; --danger:#f08a8f; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.6;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+main{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+h1{font-size:1.5rem;margin:0;letter-spacing:.04em;text-wrap:balance}
+h2{font-size:.8rem;margin:0;letter-spacing:.12em;color:var(--muted);font-weight:700}
+.sub{margin:2px 0 0;color:var(--muted);font-size:.85rem}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+button,.btn{font:inherit;border-radius:var(--r);border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:10px 14px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px}
+button:focus-visible,input:focus-visible,textarea:focus-visible,.btn:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:700}
+.ghost{background:transparent}
+.danger{color:var(--danger)}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.row>*{flex:1 1 140px}
+.btn{position:relative;overflow:hidden}
+.btn input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0}
+section{display:flex;flex-direction:column;gap:12px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:14px}
+.status{font-size:.9rem;color:var(--muted)}
+.status.warn{color:var(--warn)}
+#photoWrap{position:relative;touch-action:none;border-radius:var(--r);overflow:hidden;background:#000}
+#photoCv{display:block;width:100%;height:auto}
+.lcdbox{display:grid;grid-template-columns:110px 1fr;gap:14px;align-items:start}
+#lcdCv{width:110px;height:110px;border-radius:8px;background:var(--lcd);display:block}
+.fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.field{display:flex;flex-direction:column;gap:2px;min-width:0}
+.field label{font-size:.75rem;color:var(--muted);white-space:nowrap}
+.field input,.meta input,.meta textarea,textarea{font:inherit;width:100%;min-width:0;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--bg);color:var(--ink)}
+.fields .field input{font-family:var(--f-num);font-size:1.5rem;padding:4px 8px;font-variant-numeric:tabular-nums}
+.field.check input{border-color:var(--warn);background:var(--warn-bg)}
+.chip{font-size:.7rem;color:var(--warn);min-height:1.1em}
+.meta{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
+.meta input{font-size:.95rem;min-height:44px}
+.meta .full{grid-column:1/-1}
+.note{font-size:.8rem;color:var(--muted)}
+.lcd{background:var(--lcd);color:var(--lcd-ink);border-radius:12px;padding:14px 16px;display:grid;grid-template-columns:auto 1fr;gap:4px 14px;align-items:baseline}
+.lcd .lab{font-size:.75rem;line-height:1.2}
+.lcd .lab small{display:block;font-size:.65rem;opacity:.75}
+.lcd .v{font-family:var(--f-num);font-size:2.2rem;line-height:1.1;text-align:right;font-variant-numeric:tabular-nums}
+.lcd .cap{grid-column:1/-1;font-size:.75rem;opacity:.8;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.chartbox{overflow-x:auto}
+svg text{fill:var(--muted);font-family:var(--f-num);font-size:13px}
+.legend{display:flex;gap:14px;font-size:.8rem;color:var(--muted);flex-wrap:wrap}
+.legend i{display:inline-block;width:14px;height:3px;vertical-align:middle;margin-right:5px;border-radius:2px}
+.banner{font-size:.85rem;background:var(--warn-bg);color:var(--warn);border-radius:8px;padding:8px 12px}
+ul.log{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
+.log li{border-bottom:1px solid var(--line)}
+.log button{width:100%;border:0;border-radius:0;background:transparent;display:grid;grid-template-columns:44px 1fr auto;gap:12px;align-items:center;text-align:left;padding:10px 2px}
+.log img{width:44px;height:44px;border-radius:6px;object-fit:cover;background:var(--lcd)}
+.log .ph{width:44px;height:44px;border-radius:6px;background:var(--lcd)}
+.log .when{font-size:.8rem;color:var(--muted);display:block}
+.log .bp{font-family:var(--f-num);font-size:1.25rem;font-variant-numeric:tabular-nums}
+.log .pl{font-family:var(--f-num);color:var(--muted);font-size:.9rem;font-variant-numeric:tabular-nums}
+.log .memo{font-size:.8rem;color:var(--muted);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60vw}
+.day{font-size:.75rem;color:var(--muted);letter-spacing:.08em;padding:12px 2px 2px;border-bottom:1px solid var(--line);font-weight:700}
+.overlay{position:fixed;inset:0;background:color-mix(in srgb,var(--ink) 45%,transparent);display:flex;align-items:flex-end;justify-content:center;z-index:10;
+  padding:16px max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.sheet{background:var(--surface);border-radius:16px;padding:18px;width:100%;max-width:520px;display:flex;flex-direction:column;gap:12px;max-height:90vh;overflow:auto}
+.confirm{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:.9rem;color:var(--danger)}
+details summary{cursor:pointer;color:var(--muted);font-size:.9rem}
+textarea{font-family:var(--f-num);font-size:.75rem;min-height:120px}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+@media (max-width:520px){.lcdbox{grid-template-columns:1fr}#lcdCv{width:140px;height:140px}}
+</style>
+
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>血圧ノート</h1>
+    <p class="sub">オムロン スタンダード19シリーズの表示を写真から記録。読み取りはこの端末の中だけで行います。</p>
+  </header>
+
+  <section aria-labelledby="h-add">
+    <h2 id="h-add">記録する</h2>
+    <div class="row">
+      <label class="btn primary" for="fileCam">写真を撮る<input id="fileCam" type="file" accept="image/*" capture="environment"></label>
+      <label class="btn" for="fileLib">写真を選ぶ<input id="fileLib" type="file" accept="image/*,.heic,.heif"></label>
+    </div>
+    <button id="manualBtn" class="ghost" type="button">写真なしで手入力する</button>
+  </section>
+
+  <section id="review" class="panel" hidden aria-live="polite">
+    <div id="status" class="status"></div>
+    <div id="photoBlock">
+      <div id="photoWrap"><canvas id="photoCv"></canvas></div>
+      <div class="row" style="margin-top:8px">
+        <button id="rereadBtn" type="button">枠に合わせて読み直す</button>
+      </div>
+      <p class="note">青い枠が液晶の外周からずれていたら、四隅の丸をドラッグして合わせてから読み直してください。</p>
+    </div>
+    <form id="form" autocomplete="off">
+      <div class="lcdbox">
+        <canvas id="lcdCv" width="220" height="220" aria-label="読み取った液晶部分"></canvas>
+        <div class="fields">
+          <div class="field" id="f-sys"><label for="in-sys">最高 mmHg</label><input id="in-sys" type="number" inputmode="numeric" min="40" max="300" required><span class="chip"></span></div>
+          <div class="field" id="f-dia"><label for="in-dia">最低 mmHg</label><input id="in-dia" type="number" inputmode="numeric" min="20" max="200" required><span class="chip"></span></div>
+          <div class="field" id="f-pul"><label for="in-pul">脈拍 拍/分</label><input id="in-pul" type="number" inputmode="numeric" min="20" max="250"><span class="chip"></span></div>
+        </div>
+      </div>
+      <div class="meta" style="margin-top:12px">
+        <div class="field"><label for="in-date">日付</label><input id="in-date" type="date" required></div>
+        <div class="field"><label for="in-time">時刻</label><input id="in-time" type="time" required></div>
+        <p id="timeNote" class="note full" style="margin:0"></p>
+        <div class="field full"><label for="in-memo">メモ（任意）</label><input id="in-memo" type="text" placeholder="起床後・服薬前 など"></div>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <button class="primary" type="submit">保存する</button>
+        <button id="cancelBtn" type="button">やめる</button>
+      </div>
+    </form>
+  </section>
+
+  <section aria-labelledby="h-sum">
+    <h2 id="h-sum">直近7日の平均</h2>
+    <div id="sample" class="banner" hidden>いま表示しているのは例です。最初の記録を保存すると消えます。</div>
+    <div class="lcd" id="avg"></div>
+  </section>
+
+  <section aria-labelledby="h-chart">
+    <h2 id="h-chart">推移（最新30件）</h2>
+    <div class="legend"><span><i style="background:var(--sys)"></i>最高</span><span><i style="background:var(--dia)"></i>最低</span><span><i style="background:var(--muted);height:1px"></i>家庭血圧の目安 135/85</span></div>
+    <div class="chartbox" id="chart"></div>
+  </section>
+
+  <section aria-labelledby="h-log">
+    <h2 id="h-log">記録一覧</h2>
+    <ul class="log" id="log"></ul>
+  </section>
+
+  <section aria-labelledby="h-data">
+    <h2 id="h-data">バックアップ</h2>
+    <p class="note" style="margin:0">記録はこのブラウザの中にだけ保存されます。ときどきCSVで控えを取っておくと安心です。</p>
+    <div class="row">
+      <button id="copyCsv" type="button">CSVをコピー</button>
+      <button id="dlCsv" type="button" hidden>CSVを保存</button>
+    </div>
+    <details>
+      <summary>CSVから読み込む</summary>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+        <textarea id="csvIn" placeholder="日付,時刻,最高,最低,脈拍,メモ"></textarea>
+        <div class="row">
+          <label class="btn" for="csvFile">CSVファイルを選ぶ<input id="csvFile" type="file" accept=".csv,text/csv,text/plain"></label>
+          <button id="importBtn" type="button">読み込む（追加）</button>
+        </div>
+        <span id="importMsg" class="note"></span>
+      </div>
+    </details>
+    <textarea id="csvOut" hidden readonly aria-label="CSV"></textarea>
+  </section>
+</main>
+
+<div class="overlay" id="editOv" hidden>
+  <form class="sheet" id="editForm" autocomplete="off">
+    <h2>記録を編集</h2>
+    <div class="fields">
+      <div class="field"><label for="e-sys">最高</label><input id="e-sys" type="number" inputmode="numeric" required></div>
+      <div class="field"><label for="e-dia">最低</label><input id="e-dia" type="number" inputmode="numeric" required></div>
+      <div class="field"><label for="e-pul">脈拍</label><input id="e-pul" type="number" inputmode="numeric"></div>
+    </div>
+    <div class="meta">
+      <div class="field"><label for="e-date">日付</label><input id="e-date" type="date" required></div>
+      <div class="field"><label for="e-time">時刻</label><input id="e-time" type="time" required></div>
+      <div class="field full"><label for="e-memo">メモ</label><input id="e-memo" type="text"></div>
+    </div>
+    <div class="row">
+      <button class="primary" type="submit">保存</button>
+      <button type="button" id="e-close">閉じる</button>
+    </div>
+    <div class="confirm">
+      <button type="button" id="e-del" class="ghost danger">この記録を削除</button>
+      <span id="e-delask" hidden>本当に削除しますか？ <button type="button" id="e-delyes" class="danger">削除する</button></span>
+    </div>
+  </form>
+</div>
+
+<script>
+// BP LCD recognition core (shared by browser and node tests)
+(function (root) {
+  function toGray(rgba, w, h, stride) {
+    stride = stride || 4;
+    const g = new Uint8Array(w * h);
+    for (let i = 0, j = 0; i < w * h; i++, j += stride) g[i] = (rgba[j] * 0.299 + rgba[j + 1] * 0.587 + rgba[j + 2] * 0.114) | 0;
+    // auto-levels (1%..99%)
+    const hist = new Uint32Array(256); for (let i = 0; i < g.length; i++) hist[g[i]]++;
+    let lo = 0, hi = 255, acc = 0; const n1 = g.length * 0.01;
+    for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc > n1) { lo = v; break; } }
+    acc = 0; for (let v = 255; v >= 0; v--) { acc += hist[v]; if (acc > n1) { hi = v; break; } }
+    if (hi - lo > 20) for (let i = 0; i < g.length; i++) g[i] = Math.max(0, Math.min(255, ((g[i] - lo) * 255 / (hi - lo)) | 0));
+    return g;
+  }
+
+  // ---- LCD detection: largest square-ish dark "hole" enclosed by the white casing ----
+  function findLCD(g, w, h) {
+    const N = w * h;
+    const lab = new Int32Array(N);
+    const q = new Int32Array(N);
+    let best = null; const cands = [];
+    for (let T = 70; T <= 240; T += 8) {
+      lab.fill(0);
+      // flood non-bright from border (label -1)
+      let qh = 0, qt = 0;
+      const push = (i) => { if (lab[i] === 0 && g[i] <= T) { lab[i] = -1; q[qt++] = i; } };
+      for (let x = 0; x < w; x++) { push(x); push((h - 1) * w + x); }
+      for (let y = 0; y < h; y++) { push(y * w); push(y * w + w - 1); }
+      while (qh < qt) {
+        const i = q[qh++], x = i % w;
+        if (x > 0) push(i - 1); if (x < w - 1) push(i + 1);
+        if (i >= w) push(i - w); if (i < N - w) push(i + w);
+      }
+      // label holes
+      let id = 0;
+      for (let s = 0; s < N; s++) {
+        if (lab[s] !== 0 || g[s] > T) continue;
+        id++;
+        qh = 0; qt = 0; lab[s] = id; q[qt++] = s;
+        let area = 0, a1 = 1e9, a2 = -1e9, b1 = 1e9, b2 = -1e9;
+        let p1, p2, p3, p4, minx = w, maxx = 0, miny = h, maxy = 0;
+        while (qh < qt) {
+          const i = q[qh++], x = i % w, y = (i / w) | 0;
+          area++;
+          const sp = x + y, df = x - y;
+          if (sp < a1) { a1 = sp; p1 = [x, y]; }
+          if (sp > a2) { a2 = sp; p3 = [x, y]; }
+          if (df > b2) { b2 = df; p2 = [x, y]; }
+          if (df < b1) { b1 = df; p4 = [x, y]; }
+          if (x < minx) minx = x; if (x > maxx) maxx = x; if (y < miny) miny = y; if (y > maxy) maxy = y;
+          const nb = [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i >= w ? i - w : -1, i < N - w ? i + w : -1];
+          for (const k of nb) if (k >= 0 && lab[k] === 0 && g[k] <= T) { lab[k] = id; q[qt++] = k; }
+        }
+        if (area < N * 0.04 || area > N * 0.8) continue;
+        const quad = [p1, p2, p3, p4];
+        const qa = polyArea(quad);
+        if (qa <= 0) continue;
+        const bw = maxx - minx, bh = maxy - miny;
+        const aspect = Math.min(bw, bh) / Math.max(bw, bh);
+        const fill = area / qa; // how solid
+        const boxFill = qa / (bw * bh);
+        const score = area * Math.pow(Math.min(fill, 1), 3) * Math.pow(aspect, 2) * Math.pow(boxFill, 2);
+        const cand = { score, quad, T, fill, aspect, area, cx: (minx + maxx) / 2, cy: (miny + maxy) / 2 };
+        cands.push(cand);
+        if (!best || score > best.score) best = cand;
+      }
+    }
+    // prefer a well-formed rectangle nested inside the winner (casing panel vs. LCD)
+    for (let it = 0; best && it < 3; it++) {
+      let inner = null;
+      for (const c of cands) {
+        if (c === best || c.area < best.area * 0.4 || c.area > best.area * 0.92) continue;
+        if (c.fill < 0.95 || c.aspect < 0.8) continue;
+        if (!inQuad(best.quad, c.cx, c.cy)) continue;
+        if (!c.quad.every(([x, y]) => inQuad(best.quad, x, y))) continue;
+        if (!inner || c.area > inner.area) inner = c;
+      }
+      if (!inner) break;
+      best = inner;
+    }
+    return best;
+  }
+  function inQuad(q, x, y) {
+    let s = 0;
+    for (let i = 0; i < 4; i++) { const [x1, y1] = q[i], [x2, y2] = q[(i + 1) % 4]; const c = (x2 - x1) * (y - y1) - (y2 - y1) * (x - x1); if (c !== 0) { if (s === 0) s = Math.sign(c); else if (Math.sign(c) !== s) return false; } }
+    return true;
+  }
+  function polyArea(p) {
+    let a = 0;
+    for (let i = 0; i < p.length; i++) { const [x1, y1] = p[i], [x2, y2] = p[(i + 1) % p.length]; a += x1 * y2 - x2 * y1; }
+    return Math.abs(a) / 2;
+  }
+
+  // ---- homography (unit square -> quad) ----
+  function squareToQuad(q) {
+    const [[x0, y0], [x1, y1], [x2, y2], [x3, y3]] = q;
+    const dx1 = x1 - x2, dx2 = x3 - x2, dx3 = x0 - x1 + x2 - x3;
+    const dy1 = y1 - y2, dy2 = y3 - y2, dy3 = y0 - y1 + y2 - y3;
+    let a, b, c, d, e, f, gg, hh;
+    if (dx3 === 0 && dy3 === 0) { gg = 0; hh = 0; } else {
+      const den = dx1 * dy2 - dx2 * dy1;
+      gg = (dx3 * dy2 - dx2 * dy3) / den; hh = (dx1 * dy3 - dx3 * dy1) / den;
+    }
+    a = x1 - x0 + gg * x1; b = x3 - x0 + hh * x3; c = x0;
+    d = y1 - y0 + gg * y1; e = y3 - y0 + hh * y3; f = y0;
+    return (u, v) => { const z = gg * u + hh * v + 1; return [(a * u + b * v + c) / z, (d * u + e * v + f) / z]; };
+  }
+  function warp(g, w, h, quad, S) {
+    const H = squareToQuad(quad), out = new Uint8Array(S * S);
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const [sx, sy] = H((x + 0.5) / S, (y + 0.5) / S);
+      const x0 = Math.floor(sx - 0.5), y0 = Math.floor(sy - 0.5), fx = sx - 0.5 - x0, fy = sy - 0.5 - y0;
+      const px = (xx, yy) => g[Math.min(h - 1, Math.max(0, yy)) * w + Math.min(w - 1, Math.max(0, xx))];
+      out[y * S + x] = (px(x0, y0) * (1 - fx) * (1 - fy) + px(x0 + 1, y0) * fx * (1 - fy) + px(x0, y0 + 1) * (1 - fx) * fy + px(x0 + 1, y0 + 1) * fx * fy) | 0;
+    }
+    return out;
+  }
+
+  // morphological max/min (separable square)
+  function morph(src, S, r, isMax) {
+    const tmp = new Uint8Array(S * S), out = new Uint8Array(S * S);
+    const op = isMax ? Math.max : Math.min;
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      let m = src[y * S + x];
+      for (let k = Math.max(0, x - r); k <= Math.min(S - 1, x + r); k++) m = op(m, src[y * S + k]);
+      tmp[y * S + x] = m;
+    }
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      let m = tmp[y * S + x];
+      for (let k = Math.max(0, y - r); k <= Math.min(S - 1, y + r); k++) m = op(m, tmp[k * S + x]);
+      out[y * S + x] = m;
+    }
+    return out;
+  }
+  function boxBlur(src, S, r) {
+    const out = new Float32Array(S * S), tmp = new Float32Array(S * S);
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      let s = 0, n = 0; for (let k = Math.max(0, x - r); k <= Math.min(S - 1, x + r); k++) { s += src[y * S + k]; n++; }
+      tmp[y * S + x] = s / n;
+    }
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      let s = 0, n = 0; for (let k = Math.max(0, y - r); k <= Math.min(S - 1, y + r); k++) { s += tmp[k * S + x]; n++; }
+      out[y * S + x] = s / n;
+    }
+    return out;
+  }
+
+  // dark-ness map 0..1 (1 = segment ink) after illumination flattening
+  function inkMap(wg, S) {
+    const r = Math.round(S * 0.035);
+    const bg = boxBlur(morph(morph(wg, S, r, true), S, r, false), S, Math.round(S * 0.02));
+    const ink = new Float32Array(S * S);
+    for (let i = 0; i < S * S; i++) ink[i] = Math.max(0, 1 - wg[i] / Math.max(1, bg[i]));
+    return ink;
+  }
+
+  root.BPCore = { toGray, findLCD, warp, inkMap, morph, boxBlur, polyArea, squareToQuad };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+// Field reader for OMRON standard 19 series LCD (normalized square)
+(function(root){
+const FIELDS={
+  sys:{win:[0.14,0.48,0.22,0.735],eh:0.258,n:3,wr:0.575,pr:0.72},
+  dia:{win:[0.46,0.78,0.22,0.735],eh:0.258,n:3,wr:0.575,pr:0.72},
+  pul:{win:[0.76,0.998,0.40,0.735],eh:0.188,n:3,wr:0.575,pr:0.72},
+  top:{win:[0.02,0.175,0.40,0.745],eh:0.083,n:2,wr:0.55,pr:0.6,slant:0.12}
+};
+// segments a b c d e f g
+const SEGR={a:[0.22,0.78,0,0.13],b:[0.78,1,0.12,0.42],c:[0.78,1,0.58,0.88],d:[0.22,0.78,0.87,1],e:[0,0.22,0.58,0.88],f:[0,0.22,0.12,0.42],g:[0.22,0.78,0.43,0.57]};
+const SEGS='abcdefg'.split('');
+const PAT={0:['abcdef'],1:['bc'],2:['abdeg'],3:['abcdg'],4:['bcfg'],5:['acdfg'],6:['acdefg','cdefg'],7:['abc','abcf'],8:['abcdefg'],9:['abcdfg','abcfg']};
+function otsu(vals){const h=new Array(64).fill(0);for(const v of vals)h[Math.min(63,(v*64)|0)]++;const tot=vals.length;let sum=0;for(let i=0;i<64;i++)sum+=i*h[i];let sb=0,wb=0,best=0,bt=0;for(let i=0;i<64;i++){wb+=h[i];if(!wb)continue;const wf=tot-wb;if(!wf)break;sb+=i*h[i];const mb=sb/wb,mf=(sum-sb)/wf;const v=wb*wf*(mb-mf)**2;if(v>best){best=v;bt=i}}return (bt+0.5)/64}
+function regionFrac(bin,S,x0,x1,y0,y1){x0=Math.max(0,Math.round(x0));x1=Math.min(S,Math.round(x1));y0=Math.max(0,Math.round(y0));y1=Math.min(S,Math.round(y1));let c=0,n=0;for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){c+=bin[y*S+x];n++}return n?c/n:0}
+function sampleCell(bin,S,cx0,ty,Wd,Hd,slant){const sc={};for(const sg of SEGS){const [a,b,c,d]=SEGR[sg];const off=slant*(0.5-(c+d)/2)*Hd;sc[sg]=regionFrac(bin,S,cx0+a*Wd+off,cx0+b*Wd+off,ty+c*Hd,ty+d*Hd);}return sc}
+function classify(sc){
+  const mx=Math.max(...SEGS.map(s=>sc[s]));
+  if(mx<0.18)return {d:null,conf:1};
+  let best=null,second=null;
+  for(const [d,ps] of Object.entries(PAT))for(const p of ps){
+    let cost=0;for(const s of SEGS){const on=p.includes(s);const v=Math.max(0,Math.min(1,(sc[s]/mx-0.3)/0.5));cost+=on?(1-v):v;}
+    if(!best||cost<best.cost){if(best&&best.d!=d)second=best;best={d:+d,cost}}else if((!second||cost<second.cost)&&d!=best.d)second={d:+d,cost};
+  }
+  return {d:best.d,conf:second?Math.min(1,(second.cost-best.cost)/1.5):1,cost:best.cost};
+}
+function readField(ink,S,key,thrScale,forceR){
+  const F=FIELDS[key];const [wy0,wy1,wx0,wx1]=F.win;
+  const Y0=Math.round(wy0*S),Y1=Math.round(wy1*S),X0=Math.round(wx0*S),X1=Math.round(wx1*S);
+  const vals=[];for(let y=Y0;y<Y1;y++)for(let x=X0;x<X1;x++)vals.push(ink[y*S+x]);
+  const t=Math.max(0.1,otsu(vals))*(thrScale||1);
+  const bin=new Uint8Array(S*S);for(let y=Y0;y<Y1;y++)for(let x=X0;x<X1;x++)bin[y*S+x]=ink[y*S+x]>t?1:0;
+  // vertical extent: longest run of rows with ink
+  const W=X1-X0;let bestRun=[0,0],s=-1;
+  for(let y=Y0;y<=Y1;y++){let c=0;if(y<Y1)for(let x=X0;x<X1;x++)c+=bin[y*S+x];const on=y<Y1&&c>Math.max(2,W*0.04);
+    if(on&&s<0)s=y;if(!on&&s>=0){if(y-s>bestRun[1]-bestRun[0])bestRun=[s,y];s=-1}}
+  let [ty,by]=bestRun;let Hd=by-ty;const EH=Math.round(F.eh*S);
+  if(Math.abs(Hd-EH)>EH*0.12){ // unreliable band: slide expected-height window to max ink
+    const rows=[];for(let y=Y0;y<Y1;y++){let c=0;for(let x=X0;x<X1;x++)c+=bin[y*S+x];rows.push(c)}
+    let best=-1;for(let y=Y0;y+EH<=Y1;y++){let sm=0;for(let k=0;k<EH;k++)sm+=rows[y-Y0+k];if(sm>best){best=sm;ty=y}}
+    Hd=EH;by=ty+EH;
+  }
+  if(Hd<S*0.03)return {key,value:null,digits:[],t,reason:'no ink'};
+  // right edge: rightmost column with substantial ink within the band
+  let R=-1;for(let x=X1-1;x>=X0;x--){let c=0;for(let y=ty;y<by;y++)c+=bin[y*S+x];if(c>Hd*0.2){R=x+1;break}}
+  const rawR=R;if(forceR&&(R<0||Math.abs(R-forceR)>S*0.018))R=forceR;
+  if(R<0)return {key,value:null,digits:[],t,reason:'no edge',rawR};
+  const Wd=F.wr*Hd,P=F.pr*Hd;const cells=[];
+  for(let k=0;k<F.n;k++){
+    const cx1=R-k*P,cx0=cx1-Wd;const sc=sampleCell(bin,S,cx0,ty,Wd,Hd,F.slant||0);
+    cells.unshift({box:[cx0,ty,Wd,Hd],sc,...classify(sc)});
+  }
+  return {key,cells,t,box:[R,ty,Hd],bin,rawR};
+}
+function cellsToNumber(cells){
+  let str='';let conf=1;let started=false;
+  for(const c of cells){if(c.d===null){if(started)return {value:null,conf:0};continue}started=true;str+=c.d;conf=Math.min(conf,c.conf)}
+  return {value:str?+str:null,conf:str?conf:0};
+}
+function readTop(ink,S,bin0){
+  const r=readField(ink,S,'top');if(!r.cells)return null;
+  const [R,ty,Hd]=r.box;const bin=r.bin;
+  const mins=cellsToNumber(r.cells);
+  // separator zone left of minute tens
+  const P=0.6*Hd,Wd=0.55*Hd;const minLeft=R-P-Wd;
+  const sx0=minLeft-0.42*Hd,sx1=minLeft-0.05*Hd;
+  const up=regionFrac(bin,S,sx0,sx1,ty+0.15*Hd,ty+0.42*Hd),mid=regionFrac(bin,S,sx0,sx1,ty+0.44*Hd,ty+0.56*Hd),lo=regionFrac(bin,S,sx0,sx1,ty+0.58*Hd,ty+0.85*Hd);
+  const colon=up>0.04&&lo>0.04&&mid<0.03&&mid<Math.min(up,lo)*0.4;
+  // hour cells
+  const hR=minLeft-0.53*Hd;const hcells=[];
+  for(let k=0;k<2;k++){const cx1=hR-k*P,cx0=cx1-Wd;const sc=sampleCell(bin,S,cx0,ty,Wd,Hd,0.12);hcells.unshift({box:[cx0,ty,Wd,Hd],sc,...classify(sc)})}
+  const hrs=cellsToNumber(hcells);
+  return {colon,sep:{up,mid,lo},hh:hrs.value,mm:mins.value,conf:Math.min(hrs.conf,mins.conf),cells:[...hcells,...r.cells]};
+}
+function readAll(ink,S,thrScale){
+  const out={};
+  const Rs=['sys','dia','pul'].map(k=>readField(ink,S,k,thrScale).rawR).filter(v=>v>0).sort((a,b)=>a-b);
+  const Rc=Rs.length===3?Rs[1]:(Rs.length?Rs[0]:0);
+  for(const k of ['sys','dia','pul']){const r=readField(ink,S,k,thrScale,Rc);
+    if(r.cells&&r.cells.length===3){const h=r.cells[0];const sc=h.sc;
+      const leftInk=Math.max(sc.a,sc.d,sc.e,sc.f,sc.g);
+      const isOne=h.d===1&&leftInk<0.2&&sc.b>0.3&&sc.c>0.3;
+      const isTwo=k==='sys'&&h.d===2&&h.conf>0.3;
+      if(!isOne&&!isTwo){h.d=null;h.conf=1;}}const n=r.cells?cellsToNumber(r.cells):{value:null,conf:0};out[k]={value:n.value,conf:n.conf,cells:r.cells||[]}}
+  out.time=readTop(ink,S);
+  return out;
+}
+root.BPReco={readAll,readField,FIELDS};
+})(typeof window!=='undefined'?window:globalThis);
+// Robust: vote over quad jitter and threshold variations
+(function(root){
+const RANGE={sys:[60,260],dia:[30,160],pul:[30,200]};
+function jitterQuad(q,dx,dy,sc){const cx=(q[0][0]+q[1][0]+q[2][0]+q[3][0])/4,cy=(q[0][1]+q[1][1]+q[2][1]+q[3][1])/4;
+  const w=Math.hypot(q[1][0]-q[0][0],q[1][1]-q[0][1]),h=Math.hypot(q[3][0]-q[0][0],q[3][1]-q[0][1]);
+  return q.map(([x,y])=>[cx+(x-cx)*sc+dx*w,cy+(y-cy)*sc+dy*h]);}
+function readRobust(g,w,h,quad,S){
+  S=S||400;const votes={sys:{},dia:{},pul:{},time:{}};let n=0;let base=null;
+  const J=[[0,0,1],[0.012,0,1],[-0.012,0,1],[0,0.012,1],[0,-0.012,1],[0,0,1.02],[0,0,0.98]];
+  for(const [dx,dy,sc] of J){
+    const wg=BPCore.warp(g,w,h,jitterQuad(quad,dx,dy,sc),S);const ink=BPCore.inkMap(wg,S);
+    if(!base)base={wg,ink};
+    for(const ts of [0.8,1,1.25]){
+      const o=BPReco.readAll(ink,S,ts);n++;
+      for(const k of ['sys','dia','pul']){const v=o[k].value;if(v==null||v<RANGE[k][0]||v>RANGE[k][1])continue;votes[k][v]=(votes[k][v]||0)+1+o[k].conf;}
+      const t=o.time;if(t&&t.colon&&t.hh!=null&&t.mm!=null&&t.hh<24&&t.mm<60){const key=t.hh+':'+String(t.mm).padStart(2,'0');votes.time[key]=(votes.time[key]||0)+1+t.conf;}
+    }
+  }
+  const res={};let tc=0;for(const v of Object.values(votes.time))tc+=v;if(tc<n*0.5)votes.time={};
+  for(const k of ['sys','dia','pul','time']){const e=Object.entries(votes[k]).sort((a,b)=>b[1]-a[1]);const tot=e.reduce((s,x)=>s+x[1],0);
+    res[k]=e.length?{value:k==='time'?e[0][0]:+e[0][0],conf:e[0][1]/(n*1.67),share:e[0][1]/tot,alts:e.slice(1,3).map(x=>x[0])}:{value:null,conf:0,share:0,alts:[]};}
+  if(res.sys.value!=null&&res.dia.value!=null&&res.dia.value>=res.sys.value){res.sys.conf*=0.3;res.dia.conf*=0.3;}
+  res.base=base;return res;
+}
+root.BPReco.readRobust=readRobust;
+})(typeof window!=='undefined'?window:globalThis);
+
+</script>
+<script>
+(()=>{
+const $=s=>document.querySelector(s);
+const KEY='bpnote.v1';
+const MAXSIDE=640,S=400;
+let records=load();
+let cur=null; // {g,w,h,quad,bmp,scale}
+
+function load(){try{const r=JSON.parse(localStorage.getItem(KEY)||'[]');return Array.isArray(r)?r:[]}catch(e){return []}}
+function persist(){
+  try{localStorage.setItem(KEY,JSON.stringify(records));return true}
+  catch(e){ // quota: drop oldest thumbnails and retry
+    try{const sorted=[...records].sort((a,b)=>a.date+a.time<b.date+b.time?-1:1);for(const r of sorted.slice(0,Math.ceil(sorted.length/3)))delete r.thumb;localStorage.setItem(KEY,JSON.stringify(records));return true}catch(e2){return false}}
+}
+const pad=n=>String(n).padStart(2,'0');
+const ymd=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const hm=d=>`${pad(d.getHours())}:${pad(d.getMinutes())}`;
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+
+/* ---------- photo intake ---------- */
+for(const id of ['#fileCam','#fileLib'])$(id).addEventListener('change',e=>{const f=e.target.files[0];e.target.value='';if(f)handleFile(f)});
+$('#manualBtn').addEventListener('click',()=>openReview(null));
+$('#cancelBtn').addEventListener('click',()=>{$('#review').hidden=true;cur=null});
+
+function setStatus(html,warn){const s=$('#status');s.innerHTML=html;s.className='status'+(warn?' warn':'')}
+
+async function handleFile(file){
+  openReview(true);
+  setStatus('<span class="spin"></span>写真を読み込んでいます…');
+  let img;
+  try{img=await decodeImage(file)}catch(e){setStatus('この写真を開けませんでした（'+esc(file.name||'名前なし')+' / '+esc(file.type||'形式不明')+' / '+Math.round(file.size/1024)+'KB / '+esc(e&&e.message||'')+'）。別の写真で試すか、この表示をそのまま知らせてください。',true);return}
+  const sc=Math.min(1,MAXSIDE/Math.max(img.width,img.height));
+  const w=Math.round(img.width*sc),h=Math.round(img.height*sc);
+  const cv=document.createElement('canvas');cv.width=w;cv.height=h;const cx=cv.getContext('2d',{willReadFrequently:true});cx.drawImage(img,0,0,w,h);
+  const g=BPCore.toGray(cx.getImageData(0,0,w,h).data,w,h,4);
+  cur={g,w,h,src:cv,quad:null};
+  const found=BPCore.findLCD(g,w,h);
+  cur.quad=found?found.quad.map(p=>[p[0],p[1]]):[[w*.2,h*.25],[w*.8,h*.25],[w*.8,h*.6],[w*.2,h*.6]];
+  drawPhoto();
+  if(!found){setStatus('液晶の位置を自動で見つけられませんでした。四隅の丸を液晶の角に合わせて「枠に合わせて読み直す」を押してください。',true);fillForm({});return}
+  await runRead();
+}
+const esc=t=>String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+// iPhone photos may arrive as HEIC. Try the browser's own decoders first, then a local HEIC decoder.
+async function isHeic(file){
+  if(/heic|heif/i.test(file.type)||/\.(heic|heif)$/i.test(file.name||''))return true;
+  try{const b=new Uint8Array(await file.slice(0,32).arrayBuffer());const t=String.fromCharCode(...b.slice(4,12));
+    return t.startsWith('ftyp')&&/heic|heix|hevc|hevx|heim|heis|mif1|msf1/.test(String.fromCharCode(...b.slice(8,32)))}catch(e){return false}
+}
+async function decodeImage(file){
+  const errs=[];
+  try{return await loadImage(file)}catch(e){errs.push('img')}
+  if(window.createImageBitmap){try{return await createImageBitmap(file,{imageOrientation:'from-image'})}catch(e){try{return await createImageBitmap(file)}catch(e2){errs.push('bitmap')}}}
+  try{return await loadImageDataUrl(file)}catch(e){errs.push('dataurl')}
+  if(await isHeic(file)){
+    setStatus('<span class="spin"></span>iPhoneの写真形式（HEIC）を変換しています…');
+    try{await loadHeicLib();const out=await window.heic2any({blob:file,toType:'image/jpeg',quality:0.9});const jpg=Array.isArray(out)?out[0]:out;return await loadImage(jpg)}
+    catch(e){errs.push('heic:'+(e&&e.message||e))}
+  }
+  throw new Error(errs.join(','));
+}
+let heicLib=null;
+function loadHeicLib(){
+  if(window.heic2any)return Promise.resolve();
+  if(!heicLib)heicLib=new Promise((res,rej)=>{const sc=document.createElement('script');sc.src='https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';sc.onload=res;sc.onerror=()=>{heicLib=null;rej(new Error('HEIC変換部品を読み込めません（通信を確認）'))};document.head.appendChild(sc)});
+  return heicLib;
+}
+function loadImageDataUrl(file){return new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>{const im=new Image();im.onload=()=>res(im);im.onerror=rej;im.src=fr.result};fr.onerror=rej;fr.readAsDataURL(file)})}
+function loadImage(file){return new Promise((res,rej)=>{const u=URL.createObjectURL(file);const im=new Image();im.onload=()=>{URL.revokeObjectURL(u);res(im)};im.onerror=()=>{URL.revokeObjectURL(u);rej()};im.src=u})}
+
+async function runRead(){
+  setStatus('<span class="spin"></span>数字を読み取っています…');
+  await new Promise(r=>setTimeout(r,30));
+  const res=BPReco.readRobust(cur.g,cur.w,cur.h,cur.quad,S);
+  cur.res=res;
+  drawLcd(res.base.wg);
+  fillForm(res);
+  const low=['sys','dia','pul'].filter(k=>res[k].value==null||res[k].conf<0.45);
+  if(res.sys.value==null&&res.dia.value==null)setStatus('数字を読み取れませんでした。枠を合わせて読み直すか、数値を手で入力してください。',true);
+  else if(low.length)setStatus('読み取りました。色の付いた欄は自信が低いので、写真と見比べてください。',true);
+  else setStatus('読み取りました。内容を確かめて保存してください。');
+}
+
+/* ---------- quad editor ---------- */
+const pcv=$('#photoCv');let drag=-1;
+function drawPhoto(){
+  const {src,w,h,quad}=cur;pcv.width=w;pcv.height=h;const c=pcv.getContext('2d');c.drawImage(src,0,0);
+  const acc=getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()||'#1c3f94';
+  c.lineWidth=Math.max(2,w/220);c.strokeStyle='#4f7cff';c.fillStyle='rgba(79,124,255,.12)';
+  c.beginPath();quad.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1]));c.closePath();c.fill();c.stroke();
+  const r=Math.max(8,w/40);
+  for(const [x,y] of quad){c.beginPath();c.arc(x,y,r,0,7);c.fillStyle='rgba(255,255,255,.9)';c.fill();c.lineWidth=3;c.strokeStyle='#4f7cff';c.stroke()}
+}
+function toImg(e){const b=pcv.getBoundingClientRect();return [(e.clientX-b.left)*cur.w/b.width,(e.clientY-b.top)*cur.h/b.height]}
+pcv.addEventListener('pointerdown',e=>{if(!cur)return;const [x,y]=toImg(e);let best=-1,bd=1e9;cur.quad.forEach((p,i)=>{const d=Math.hypot(p[0]-x,p[1]-y);if(d<bd){bd=d;best=i}});
+  if(bd<cur.w*0.12){drag=best;pcv.setPointerCapture(e.pointerId);e.preventDefault()}});
+pcv.addEventListener('pointermove',e=>{if(drag<0)return;const [x,y]=toImg(e);cur.quad[drag]=[Math.max(0,Math.min(cur.w,x)),Math.max(0,Math.min(cur.h,y))];drawPhoto()});
+const endDrag=()=>{drag=-1};pcv.addEventListener('pointerup',endDrag);pcv.addEventListener('pointercancel',endDrag);
+$('#rereadBtn').addEventListener('click',()=>{if(cur)runRead()});
+
+function drawLcd(wg){
+  const c=$('#lcdCv'),cx=c.getContext('2d');const id=cx.createImageData(S,S);
+  for(let i=0;i<S*S;i++){const v=wg[i];id.data[i*4]=v;id.data[i*4+1]=v;id.data[i*4+2]=v;id.data[i*4+3]=255}
+  const t=document.createElement('canvas');t.width=S;t.height=S;t.getContext('2d').putImageData(id,0,0);
+  cx.clearRect(0,0,c.width,c.height);cx.drawImage(t,0,0,c.width,c.height);
+}
+function thumbData(){
+  if(!cur||!cur.res)return null;
+  const t=document.createElement('canvas');t.width=96;t.height=96;t.getContext('2d').drawImage($('#lcdCv'),0,0,96,96);
+  try{return t.toDataURL('image/jpeg',0.6)}catch(e){return null}
+}
+
+/* ---------- review form ---------- */
+function openReview(withPhoto){
+  $('#review').hidden=false;$('#photoBlock').hidden=!withPhoto;
+  if(!withPhoto){cur=null;setStatus('数値と日時を入力して保存してください。');const c=$('#lcdCv');c.getContext('2d').clearRect(0,0,c.width,c.height);fillForm({})}
+  $('#review').scrollIntoView({behavior:'smooth',block:'start'});
+}
+function fillForm(res){
+  for(const k of ['sys','dia','pul']){
+    const r=res[k]||{value:null,conf:0};const f=$('#f-'+k);
+    $('#in-'+k).value=r.value??'';
+    const check=!!res.sys&&(r.value==null||r.conf<0.45);
+    f.classList.toggle('check',check);
+    f.querySelector('.chip').textContent=check?(r.value==null?'読めませんでした':'要確認'+(r.alts&&r.alts.length?`（候補 ${r.alts.join('・')}）`:'')):'';
+  }
+  const now=new Date();let date=new Date(now),time=hm(now),note='';
+  if(res.time&&res.time.value){
+    const [hh,mm]=res.time.value.split(':').map(Number);time=`${pad(hh)}:${pad(mm)}`;
+    if(hh*60+mm>now.getHours()*60+now.getMinutes()+10){date.setDate(date.getDate()-1);note='時刻は写真から。今より後の時刻なので、日付は前日にしています。'}
+    else note='時刻は写真から読み取りました。日付は今日です。';
+  }else if(res.sys){note='写真に時刻が表示されていないため、いまの時刻を入れています（日付表示のときは記録呼び出し画面です）。'}
+  else note='';
+  $('#in-date').value=ymd(date);$('#in-time').value=time;$('#in-memo').value='';$('#timeNote').textContent=note;
+}
+$('#form').addEventListener('submit',e=>{
+  e.preventDefault();
+  const sys=+$('#in-sys').value,dia=+$('#in-dia').value,pulV=$('#in-pul').value;
+  if(!sys||!dia){setStatus('最高と最低を入れてください。',true);return}
+  if(dia>=sys){setStatus('最低が最高以上になっています。数値を確かめてください。',true);return}
+  const rec={id:uid(),date:$('#in-date').value,time:$('#in-time').value,sys,dia,pul:pulV?+pulV:null,memo:$('#in-memo').value.trim(),thumb:thumbData(),created:new Date().toISOString()};
+  records.push(rec);
+  if(!persist()){records.pop();setStatus('保存できませんでした。ブラウザの保存領域がいっぱいか、使えない設定になっています。',true);return}
+  $('#review').hidden=true;cur=null;render();
+  document.getElementById('h-log').scrollIntoView({behavior:'smooth'});
+});
+
+/* ---------- views ---------- */
+const SAMPLE=(()=>{const d=new Date();const out=[];const v=[[132,80,68,'06:52'],[127,88,74,'21:40'],[134,87,74,'06:45'],[130,88,82,'22:05'],[130,88,78,'07:01']];
+  v.forEach((x,i)=>{const t=new Date(d);t.setDate(d.getDate()-Math.floor((v.length-1-i)/2));out.push({id:'s'+i,date:ymd(t),time:x[3],sys:x[0],dia:x[1],pul:x[2],memo:'例',sample:true})});return out})();
+const sortKey=r=>r.date+'T'+r.time;
+function render(){
+  const real=records.length>0;const list=(real?records:SAMPLE).slice().sort((a,b)=>sortKey(a)<sortKey(b)?1:-1);
+  $('#sample').hidden=real;
+  // averages
+  const since=new Date();since.setDate(since.getDate()-6);const s=ymd(since);
+  const wk=list.filter(r=>r.date>=s);const avg=k=>{const a=wk.map(r=>r[k]).filter(v=>v!=null);return a.length?Math.round(a.reduce((x,y)=>x+y,0)/a.length):'—'};
+  $('#avg').innerHTML=`<span class="lab">最高血圧<small>mmHg</small></span><span class="v">${avg('sys')}</span>
+    <span class="lab">最低血圧<small>mmHg</small></span><span class="v">${avg('dia')}</span>
+    <span class="lab">脈拍<small>拍/分</small></span><span class="v">${avg('pul')}</span>
+    <span class="cap"><span>${wk.length}回の測定</span><span>${s.slice(5).replace('-','/')} 〜 今日</span></span>`;
+  renderChart(list.slice(0,30).reverse());
+  // log
+  const ul=$('#log');ul.innerHTML='';let day='';
+  for(const r of list){
+    if(r.date!==day){day=r.date;const d=new Date(r.date+'T00:00');const li=document.createElement('li');li.className='day';li.textContent=`${d.getMonth()+1}月${d.getDate()}日（${'日月火水木金土'[d.getDay()]}）`;ul.appendChild(li)}
+    const li=document.createElement('li');const b=document.createElement('button');b.type='button';
+    b.innerHTML=`${r.thumb?`<img alt="" src="${r.thumb}">`:'<span class="ph"></span>'}<span><span class="when">${r.time}</span><span class="bp">${r.sys}<span style="color:var(--muted)">/</span>${r.dia}</span>${r.memo?`<span class="memo"></span>`:''}</span><span class="pl">${r.pul??'—'}<br><small>拍/分</small></span>`;
+    if(r.memo)b.querySelector('.memo').textContent=r.memo;
+    if(r.sample)b.disabled=true;else b.addEventListener('click',()=>openEdit(r.id));
+    li.appendChild(b);ul.appendChild(li);
+  }
+}
+function renderChart(pts){
+  const box=$('#chart');if(pts.length<2){box.innerHTML='<p class="note">2件以上記録するとグラフになります。</p>';return}
+  const W=520,H=230,L=40,R=10,T=10,B=28;
+  const hi=Math.max(160,...pts.map(p=>p.sys))+5,lo=Math.min(60,...pts.map(p=>p.dia))-5;
+  const x=i=>L+(W-L-R)*(pts.length===1?0.5:i/(pts.length-1)),y=v=>T+(H-T-B)*(1-(v-lo)/(hi-lo));
+  let sv=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="min-width:320px;display:block" role="img" aria-label="血圧の推移">`;
+  for(let v=Math.ceil(lo/20)*20;v<=hi;v+=20)sv+=`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${L-6}" y="${y(v)+3}" text-anchor="end">${v}</text>`;
+  for(const ref of [135,85])sv+=`<line x1="${L}" x2="${W-R}" y1="${y(ref)}" y2="${y(ref)}" stroke="var(--muted)" stroke-dasharray="4 4" stroke-width="1"/>`;
+  const path=k=>pts.map((p,i)=>(i?'L':'M')+x(i).toFixed(1)+' '+y(p[k]).toFixed(1)).join(' ');
+  sv+=`<path d="${path('sys')}" fill="none" stroke="var(--sys)" stroke-width="2"/><path d="${path('dia')}" fill="none" stroke="var(--dia)" stroke-width="2"/>`;
+  pts.forEach((p,i)=>{sv+=`<circle cx="${x(i)}" cy="${y(p.sys)}" r="${i===pts.length-1?4:2.5}" fill="var(--sys)"/><circle cx="${x(i)}" cy="${y(p.dia)}" r="${i===pts.length-1?4:2.5}" fill="var(--dia)"/>`});
+  const f=pts[0],l=pts[pts.length-1];const md=r=>r.date.slice(5).replace('-','/');
+  sv+=`<text x="${L}" y="${H-8}">${md(f)}</text><text x="${W-R}" y="${H-8}" text-anchor="end">${md(l)}</text></svg>`;
+  box.innerHTML=sv;
+}
+
+/* ---------- edit ---------- */
+let editing=null;
+function openEdit(id){
+  editing=records.find(r=>r.id===id);if(!editing)return;
+  for(const k of ['sys','dia','pul','date','time','memo'])$('#e-'+k).value=editing[k]??'';
+  $('#e-delask').hidden=true;$('#editOv').hidden=false;$('#e-sys').focus();
+}
+const closeEdit=()=>{$('#editOv').hidden=true;editing=null};
+$('#e-close').addEventListener('click',closeEdit);
+$('#editOv').addEventListener('click',e=>{if(e.target.id==='editOv')closeEdit()});
+$('#editForm').addEventListener('submit',e=>{e.preventDefault();if(!editing)return;
+  editing.sys=+$('#e-sys').value;editing.dia=+$('#e-dia').value;editing.pul=$('#e-pul').value?+$('#e-pul').value:null;
+  editing.date=$('#e-date').value;editing.time=$('#e-time').value;editing.memo=$('#e-memo').value.trim();persist();closeEdit();render()});
+$('#e-del').addEventListener('click',()=>{$('#e-delask').hidden=false});
+$('#e-delyes').addEventListener('click',()=>{if(!editing)return;records=records.filter(r=>r!==editing);persist();closeEdit();render()});
+
+/* ---------- CSV ---------- */
+const q=s=>/[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;
+function toCsv(){return '日付,時刻,最高,最低,脈拍,メモ\n'+records.slice().sort((a,b)=>sortKey(a)<sortKey(b)?-1:1).map(r=>[r.date,r.time,r.sys,r.dia,r.pul??'',q(r.memo||'')].join(',')).join('\n')+'\n'}
+$('#copyCsv').addEventListener('click',async()=>{const t=toCsv();const out=$('#csvOut');out.value=t;
+  try{await navigator.clipboard.writeText(t);$('#copyCsv').textContent='コピーしました'}catch(e){out.hidden=false;out.focus();out.select();$('#copyCsv').textContent='下の欄を選択してコピーしてください'}
+  setTimeout(()=>$('#copyCsv').textContent='CSVをコピー',2500)});
+let framed=true;try{framed=window.self!==window.top}catch(e){}
+if(!framed){$('#dlCsv').hidden=false;$('#dlCsv').addEventListener('click',()=>{const b=new Blob(['﻿'+toCsv()],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`blood-pressure-${ymd(new Date())}.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)})}
+$('#csvFile').addEventListener('change',async e=>{const f=e.target.files[0];if(f)$('#csvIn').value=await f.text();e.target.value=''});
+$('#importBtn').addEventListener('click',()=>{
+  const lines=$('#csvIn').value.replace(/^﻿/,'').split(/\r?\n/).filter(l=>l.trim());let n=0,bad=0;
+  const seen=new Set(records.map(r=>`${r.date} ${r.time} ${r.sys}/${r.dia}`));
+  for(const l of lines){const c=parseLine(l);if(!/^\d{4}-\d{2}-\d{2}$/.test(c[0]||'')){if(!/日付/.test(c[0]||''))bad++;continue}
+    const r={id:uid(),date:c[0],time:(c[1]||'00:00').padStart(5,'0'),sys:+c[2],dia:+c[3],pul:c[4]?+c[4]:null,memo:c[5]||'',created:new Date().toISOString()};
+    if(!r.sys||!r.dia){bad++;continue}const k=`${r.date} ${r.time} ${r.sys}/${r.dia}`;if(seen.has(k))continue;seen.add(k);records.push(r);n++}
+  persist();render();$('#importMsg').textContent=`${n}件を追加しました`+(bad?`（${bad}行は形式が合わず読み飛ばしました）`:'');
+});
+function parseLine(l){const out=[];let cur='',inq=false;for(let i=0;i<l.length;i++){const ch=l[i];if(inq){if(ch=='"'&&l[i+1]=='"'){cur+='"';i++}else if(ch=='"')inq=false;else cur+=ch}else if(ch=='"')inq=true;else if(ch==','){out.push(cur);cur=''}else cur+=ch}out.push(cur);return out.map(s=>s.trim())}
+
+render();
+})();
+</script>
+
+</body>
+</html>
